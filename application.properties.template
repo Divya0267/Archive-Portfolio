@@ -1,0 +1,42 @@
+# ================================================================
+# DATABASE CONFIGURATION
+# ================================================================
+# MySQL Database Connection
+spring.datasource.url=jdbc:mysql://localhost:3306/assets_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+spring.datasource.username=root
+spring.datasource.password=YOUR_MYSQL_PASSWORD_HERE
+
+# JPA/Hibernate Configuration
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQL8Dialect
+
+# ================================================================
+# API KEYS - GET FREE KEYS FROM:
+# ================================================================
+# Gemini API: https://makersuite.google.com/app/apikey
+# StockData API: https://www.stockdata.org/
+
+# Gemini API (for AI Chatbot)
+gemini.api.base-url=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=
+gemini.api.key=YOUR_GEMINI_API_KEY_HERE
+
+# StockData API (for Stock Prices)
+stockdata.api.key=YOUR_STOCKDATA_API_KEY_HERE
+
+# ================================================================
+# SERVER CONFIGURATION
+# ================================================================
+# Change port if 8080 is already in use
+# server.port=8080
+
+# ================================================================
+# IMPORTANT NOTES:
+# ================================================================
+# 1. Replace all "YOUR_*_HERE" placeholders with actual values
+# 2. Never commit API keys to version control!
+# 3. For production, use environment variables:
+#    - ${MYSQL_PASSWORD}
+#    - ${GEMINI_API_KEY}
+#    - ${STOCKDATA_API_KEY}
+# ================================================================
