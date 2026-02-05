@@ -118,7 +118,8 @@ public class UserAssetController {
     public List<DashboardAsset> getHoldings() {
         return repo.findAll().stream()
                 .filter(a -> a.getQty() != null && a.getQty() > 0)
-                .map(this::mapToDashboard)
+                .map(this::mapToDashboardSafe)
+                .filter(java.util.Objects::nonNull)
                 .collect(Collectors.toList());
     }
 
@@ -131,6 +132,16 @@ public class UserAssetController {
     }
 
     // ---------------- HELPERS ----------------
+    /** Safe mapping: if live price fails (e.g. rate limit for crypto), skip this asset so others still show. */
+    private DashboardAsset mapToDashboardSafe(UserAsset asset) {
+        try {
+            return mapToDashboard(asset);
+        } catch (Exception e) {
+            System.err.println("Skipping asset " + asset.getSymbol() + " (" + asset.getAssetType() + "): " + e.getMessage());
+            return null;
+        }
+    }
+
     private DashboardAsset mapToDashboard(UserAsset asset) {
         BigDecimal livePrice =
                 getLivePrice(asset.getAssetType(), asset.getSymbol());

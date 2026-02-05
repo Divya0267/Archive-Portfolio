@@ -13,14 +13,14 @@
     rel="stylesheet"
     href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
   />
-  <link rel="stylesheet" href="assets/css/styles.css" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body data-page="report">
   <div class="d-flex">
     <!-- Sidebar -->
     <nav id="sidebar" class="sidebar d-flex flex-column flex-shrink-0 p-3">
       <a href="index.html" class="sidebar-brand d-flex align-items-center mb-3 mb-md-0 me-md-auto text-decoration-none">
-        <span class="fs-5 fw-bold">My Portfolio</span>
+        <span class="fs-5 fw-bold">Archive Portfolio</span>
       </a>
       <hr />
       <ul class="nav nav-pills flex-column mb-auto gap-1">
@@ -124,47 +124,52 @@
         </div>
 
         <div class="row g-4">
-          <!-- Insights -->
-          <div class="col-12 col-xl-8">
-            <div class="card shadow-sm h-100">
-              <div class="card-header">
-                <h2 class="card-title h6 mb-0">Insights</h2>
+          <!-- Weekly Report -->
+          <div class="col-12">
+            <div class="card shadow-sm">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 class="card-title h6 mb-0">Weekly Report</h2>
+                <button class="btn btn-outline-primary btn-sm" id="load-weekly-report">
+                  <i class="bi bi-download me-1"></i> Load Weekly Report
+                </button>
               </div>
               <div class="card-body">
-                <ul class="list-unstyled small mb-0" id="report-insights">
-                  <!-- JS will inject insight bullets here -->
-                  <li class="mb-2 text-muted">
-                    Insights will be generated from your holdings and recommendations.
-                  </li>
-                </ul>
+                <div id="weekly-report-content" class="small text-muted">
+                  Click "Load Weekly Report" to generate a comprehensive weekly summary of your portfolio.
+                </div>
               </div>
-              <div class="card-footer small text-muted">
-                <!-- BACKEND INTEGRATION NOTE:
-                     Report data can combine:
-                       - /api/portfolio (for overall metrics)
-                       - /api/holdings (for gainers/losers)
-                       - /api/recommendations/top3 (for suggestions & insights). -->
-                Combine multiple endpoints to build richer insights.
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-4 mt-1">
+          <!-- Stock diversification -->
+          <div class="col-12 col-lg-4">
+            <div class="card shadow-sm h-100">
+              <div class="card-header">
+                <h2 class="card-title h6 mb-0">Stock diversification</h2>
+              </div>
+              <div class="card-body">
+                <p class="mb-0 small" id="report-diversification">
+                  Loading…
+                </p>
+                <p class="mt-2 mb-0 small text-muted">
+                  Ask the chatbot “suggest top n stocks” for recommendations and diversification.
+                </p>
               </div>
             </div>
           </div>
 
-          <!-- Recommendations -->
-          <div class="col-12 col-xl-4">
+          <!-- Market news -->
+          <div class="col-12 col-lg-8">
             <div class="card shadow-sm h-100">
-              <div class="card-header d-flex justify-content-between align-items-center">
-                <h2 class="card-title h6 mb-0">Top 3 Recommendations</h2>
-                <span class="small text-muted">From /api/recommendations/top3</span>
+              <div class="card-header">
+                <h2 class="card-title h6 mb-0">Stocks & crypto market news</h2>
               </div>
               <div class="card-body">
-                <ul class="list-group list-group-flush small" id="report-recommendations">
-                  <!-- JS will render recommendations here -->
+                <ul class="list-unstyled small mb-0" id="report-insights">
+                  <li class="mb-2 text-muted">Loading…</li>
                 </ul>
-              </div>
-              <div class="card-footer text-end">
-                <a href="chatbot.html" class="btn btn-outline-primary btn-sm">
-                  Discuss with AI <i class="bi bi-arrow-right-short"></i>
-                </a>
               </div>
             </div>
           </div>
@@ -174,7 +179,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/api.js"></script>
-  <script src="assets/js/app.js"></script>
+  <script src="api.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

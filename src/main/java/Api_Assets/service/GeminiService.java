@@ -45,8 +45,8 @@ public class GeminiService {
                 {
                   "contents": [{"parts":[{"text": "%s"}]}],
                   "generationConfig": {
-                    "temperature": 0.7,
-                    "maxOutputTokens": 1024
+                    "temperature": 0.3,
+                    "maxOutputTokens": 256
                   }
                 }
                 """.formatted(prompt);

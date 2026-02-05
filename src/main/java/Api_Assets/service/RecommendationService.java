@@ -1,5 +1,6 @@
 package Api_Assets.service;
 
+import Api_Assets.dto.MarketCryptoItem;
 import Api_Assets.dto.UserAssetRecommendation;
 import Api_Assets.entity.UserAsset;
 import Api_Assets.repository.UserAssetRepository;
@@ -206,5 +207,73 @@ public class RecommendationService {
 
     public List<UserAsset> getAllStocks() {
         return userAssetRepository.findAllStocks();
+    }
+
+    /** Top N stocks: from portfolio first, then fill from market (StockData / TOP_MARKET_STOCKS + MARKET_PERFORMANCE). */
+    public List<UserAssetRecommendation> getTopNStocksSuggestions(int n) {
+        List<UserAssetRecommendation> list = getTopNStocks(n);
+        if (list.size() >= n) return list;
+        Set<String> have = list.stream().map(r -> normalizeSymbol(r.getSymbol())).collect(Collectors.toSet());
+        for (String symbol : TOP_MARKET_STOCKS) {
+            if (list.size() >= n) break;
+            String sym = symbol.toUpperCase();
+            if (have.contains(sym)) continue;
+            have.add(sym);
+            BigDecimal perf = MARKET_PERFORMANCE.getOrDefault(symbol, BigDecimal.ZERO);
+            try {
+                stockService.getCurrentPrice(symbol);
+            } catch (Exception ignored) { }
+            list.add(new UserAssetRecommendation(sym, calculateRisk(perf), perf));
+        }
+        list.sort(Comparator.comparing(UserAssetRecommendation::getProfitPercent).reversed());
+        return list;
+    }
+
+    /** Top N crypto: from portfolio first, then fill from CoinGecko top by market cap. */
+    public List<UserAssetRecommendation> getTopNCryptoSuggestions(int n) {
+        List<UserAssetRecommendation> list = getTopNCrypto(n);
+        if (list.size() >= n) return list;
+        Set<String> have = list.stream().map(r -> normalizeSymbol(r.getSymbol())).collect(Collectors.toSet());
+        List<MarketCryptoItem> market = cryptoService.getTopCryptoFromMarket(n + 15);
+        for (MarketCryptoItem m : market) {
+            if (list.size() >= n) break;
+            String sym = m.getSymbol() != null ? m.getSymbol().toUpperCase() : null;
+            if (sym == null || have.contains(sym)) continue;
+            have.add(sym);
+            BigDecimal change = m.getPriceChangePercent24h() != null ? m.getPriceChangePercent24h() : BigDecimal.ZERO;
+            list.add(new UserAssetRecommendation(sym, calculateRisk(change), change));
+        }
+        list.sort(Comparator.comparing(UserAssetRecommendation::getProfitPercent).reversed());
+        return list;
+    }
+
+    /** Top N assets: from portfolio first, then fill from market stocks then market crypto. */
+    public List<UserAssetRecommendation> getTopNAssetsSuggestions(int n) {
+        List<UserAssetRecommendation> list = new ArrayList<>(getTopNAssets(n));
+        if (list.size() >= n) return list;
+        Set<String> have = list.stream().map(r -> normalizeSymbol(r.getSymbol())).collect(Collectors.toSet());
+        int need = n - list.size();
+        for (String symbol : TOP_MARKET_STOCKS) {
+            if (need <= 0) break;
+            String sym = symbol.toUpperCase();
+            if (have.contains(sym)) continue;
+            have.add(sym);
+            BigDecimal perf = MARKET_PERFORMANCE.getOrDefault(symbol, BigDecimal.ZERO);
+            list.add(new UserAssetRecommendation(sym, calculateRisk(perf), perf));
+            need--;
+        }
+        if (need > 0) {
+            for (MarketCryptoItem m : cryptoService.getTopCryptoFromMarket(need + 10)) {
+                if (need <= 0) break;
+                String sym = m.getSymbol() != null ? m.getSymbol().toUpperCase() : null;
+                if (sym == null || have.contains(sym)) continue;
+                have.add(sym);
+                BigDecimal change = m.getPriceChangePercent24h() != null ? m.getPriceChangePercent24h() : BigDecimal.ZERO;
+                list.add(new UserAssetRecommendation(sym, calculateRisk(change), change));
+                need--;
+            }
+        }
+        list.sort(Comparator.comparing(UserAssetRecommendation::getProfitPercent).reversed());
+        return list;
     }
 }
