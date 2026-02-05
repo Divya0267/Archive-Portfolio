@@ -19,25 +19,20 @@ APIs: Binance, StockData.org, Gemini AI
 Build: Maven
 Testing: JUnit 
 
+## 📋 API Endpoints
 
-## 📁 Project Structure
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/assets` | Add stock/crypto |
+| GET | `/api/assets` | Get all assets |
+| GET | `/api/assets/stocks` | All stock holdings |
+| GET | `/api/assets/crypto` | All crypto holdings |
+| POST | `/api/assets/sell/{id}` | Sell by asset ID |
+| GET | `/api/assets/dashboard` | Live P/L dashboard |
+| GET | `/api/assets/risk/buy/{symbol}/{qty}` | Buy risk assessment |
+| GET | `/api/chat?message=...` | AI chatbot |
 
-src/main/java/Api_Assets/
-├── ApiAssetsApplication.java # Spring Boot main
-├── controller/
-│ ├── AssetController.java # /api/assets
-│ └── ChatController.java # /api/chat
-├── entity/UserAsset.java # Portfolio data model
-├── repository/UserAssetRepository.java
-├── dto/
-│ ├── DashboardAsset.java
-│ ├── RiskAssessment.java
-│ └── SellRequest.java
-└── service/
-├── AssetService.java # Risk logic
-├── CryptoService.java # Binance
-├── StockService.java # StockData.org
-└── ChatService.java # Gemini AI
+**Base URL**: `http://localhost:8080`
 
 
 ## 🏃 Quick Start
@@ -47,13 +42,15 @@ src/main/java/Api_Assets/
 
 ### 1. Clone & Build
 ```bash
-git clone https://github.com/manvitaimmaneni/Archive-FinancialPortfolio.git
+git clone https://github.com/divya0267/Archive-FinancialPortfolio.git
 cd Archive-FinancialPortfolio
 mvn clean install
 
 ### 2. Configure API Keys (application.properties)
+```properties
 stockdata.api.key=YOUR_STOCKDATA_KEY
 gemini.api.key=YOUR_GEMINI_KEY
+
 
 ### 3. Run
 mvn spring-boot:run
