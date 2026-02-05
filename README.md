@@ -44,17 +44,17 @@ Testing: JUnit
 ### Prerequisites
 - Java 17+, Maven 3.8+
 
-### 1. Clone and Build
-```bash
+1. Clone and Build
+
 git clone https://github.com/divya0267/Archive-FinancialPortfolio.git
 cd Archive-FinancialPortfolio
 mvn clean install
 
-### 2.** Configure API Keys (application.properties)**
+2.  Configure API Keys (application.properties)
 stockdata.api.key=YOUR_STOCKDATA_KEY
 gemini.api.key=YOUR_GEMINI_KEY
 
 
-### 3.**Run**
+3. Run
 mvn spring-boot:run
 
