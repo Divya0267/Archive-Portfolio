@@ -1,3 +1,5 @@
+
+
 document.addEventListener("DOMContentLoaded", () => {
   highlightActiveNav();
 
@@ -26,7 +28,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-/* NAVIGATION */
+
+
 
 function highlightActiveNav() {
   const page = document.body.dataset.page;
@@ -37,19 +40,52 @@ function highlightActiveNav() {
     if (!href) return;
 
     if (
-      (page === "dashboard" && href.includes("index.html")) ||
-      (page === "manage-assets" && href.includes("manage-assets.html")) ||
-      (page === "holdings" && href.includes("holdings.html")) ||
-      (page === "charts" && href.includes("charts.html")) ||
-      (page === "chatbot" && href.includes("chatbot.html")) ||
-      (page === "report" && href.includes("report.html"))
+        (page === "dashboard" && href.includes("index.html")) ||
+        (page === "manage-assets" && href.includes("manage-assets.html")) ||
+        (page === "holdings" && href.includes("holdings.html")) ||
+        (page === "charts" && href.includes("charts.html")) ||
+        (page === "chatbot" && href.includes("chatbot.html")) ||
+        (page === "report" && href.includes("report.html"))
     ) {
       link.classList.add("active");
     }
   });
 }
 
-/* DASHBOARD */
+function getAvgBuyPriceForSymbol(symbol, holdings) {
+  const symbolHoldings = holdings.filter(h => h.symbol === symbol && h.quantity > 0);
+
+  if (symbolHoldings.length === 0) return 'N/A';
+
+  const totalValue = symbolHoldings.reduce((sum, h) => sum + (h.buyPrice * h.quantity), 0);
+  const totalQty = symbolHoldings.reduce((sum, h) => sum + h.quantity, 0);
+  return (totalValue / totalQty).toFixed(2);
+}
+
+// GLOBAL SELL MODAL SUPPORT
+let currentSellAsset = null;
+
+function openSellModal(asset) {
+  if (!asset || !asset.symbol) return;
+  currentSellAsset = {
+    symbol: asset.symbol,
+    name: asset.name || '-',
+    category: asset.category || '-',
+    buyPrice: asset.buyPrice ?? 0,
+    quantity: Number(asset.quantity) || 0,
+    currentPrice: Number(asset.currentPrice) || asset.buyPrice || 0
+  };
+  const modal = document.getElementById('sellModal');
+  if (!modal) return;
+  document.getElementById('sell-symbol').textContent = currentSellAsset.symbol;
+  document.getElementById('sell-available').textContent = currentSellAsset.quantity;
+  document.getElementById('sell-max').textContent = currentSellAsset.quantity;
+  document.getElementById('sell-qty').value = '';
+  document.getElementById('sell-qty').max = currentSellAsset.quantity;
+  document.getElementById('sell-error').classList.add('d-none');
+  document.getElementById('sell-proceeds').textContent = '$0.00';
+  new bootstrap.Modal(modal).show();
+}
 
 async function initDashboard() {
   const totalValueEl = document.getElementById("total-portfolio-value");
@@ -60,53 +96,66 @@ async function initDashboard() {
   const categoryBarsContainer = document.getElementById("category-breakdown-bars");
   const trendList = document.getElementById("trend-list");
   const lastUpdatedEl = document.getElementById("last-updated");
+  const refreshBtn = document.getElementById("refresh-dashboard");
 
-  try {
-    const data = await API.getPortfolio();
+  async function loadDashboard() {
+    try {
+      const data = await API.getPortfolio();
 
-    // Total metrics
-    totalValueEl.textContent = formatCurrency(data.totalValue);
-    totalPLEl.textContent = formatCurrency(data.totalPL);
+      // Total metrics
+      totalValueEl.textContent = formatCurrency(data.totalValue);
+      totalPLEl.textContent = formatCurrency(data.totalPL);
 
-    const percent = data.totalPLPercent ?? (data.totalValue ? (data.totalPL / (data.totalValue - data.totalPL)) * 100 : 0);
-    const percentStr = `${percent.toFixed(2)}% overall return.`;
-    totalPLPercentEl.textContent = percentStr;
-    totalPLEl.classList.toggle("pl-positive", data.totalPL >= 0);
-    totalPLEl.classList.toggle("pl-negative", data.totalPL < 0);
+      const percent = data.totalPLPercent ?? (data.totalValue ? (data.totalPL / (data.totalValue - data.totalPL)) * 100 : 0);
+      const percentStr = `${percent.toFixed(2)}% overall return.`;
+      totalPLPercentEl.textContent = percentStr;
+      totalPLEl.classList.toggle("pl-positive", data.totalPL >= 0);
+      totalPLEl.classList.toggle("pl-negative", data.totalPL < 0);
 
-    // Category breakdown
-    renderCategoryBars(data.categories || {}, categoryBarsContainer);
+      // Category breakdown
+      renderCategoryBars(data.categories || {}, categoryBarsContainer);
 
-    // Top category
-    const topCat = Object.entries(data.categories || {}).sort((a, b) => b[1] - a[1])[0];
-    topCategoryEl.textContent = topCat ? `${topCat[0]} (${formatPercent(topCat[1] / data.totalValue)})` : "—";
+      // Top category
+      const topCat = Object.entries(data.categories || {}).sort((a, b) => b[1] - a[1])[0];
+      topCategoryEl.textContent = topCat ? `${topCat[0]} (${formatPercent(topCat[1] / data.totalValue)})` : "—";
 
-    // Trend summaries
-    trendList.innerHTML = "";
-    (data.trends || []).forEach((trend) => {
-      const li = document.createElement("li");
-      li.className = "list-group-item d-flex justify-content-between align-items-center";
-      li.innerHTML = `<span class="fw-semibold">${trend.label}</span><span class="text-muted">${trend.description}</span>`;
-      trendList.appendChild(li);
-    });
+      // Trend summaries
+      trendList.innerHTML = "";
+      (data.trends || []).forEach((trend) => {
+        const li = document.createElement("li");
+        li.className = "list-group-item d-flex justify-content-between align-items-center";
+        li.innerHTML = `<span class="fw-semibold">${trend.label}</span><span class="text-muted">${trend.description}</span>`;
+        trendList.appendChild(li);
+      });
 
-    // Simple overall trend label
-    if (data.totalPL > 0) {
-      trendSummaryEl.textContent = "Uptrend";
-    } else if (data.totalPL < 0) {
-      trendSummaryEl.textContent = "Downtrend";
-    } else {
-      trendSummaryEl.textContent = "Flat";
-    }
+      // Simple overall trend label
+      if (data.totalPL > 0) {
+        trendSummaryEl.textContent = "Uptrend";
+      } else if (data.totalPL < 0) {
+        trendSummaryEl.textContent = "Downtrend";
+      } else {
+        trendSummaryEl.textContent = "Flat";
+      }
 
-    // Last updated timestamp
-    lastUpdatedEl.textContent = new Date().toLocaleString();
-  } catch (err) {
-    console.error("Failed to load dashboard:", err);
-    if (lastUpdatedEl) {
-      lastUpdatedEl.textContent = "Error loading data";
+      // Last updated timestamp
+      lastUpdatedEl.textContent = new Date().toLocaleString();
+    } catch (err) {
+      console.error("Failed to load dashboard:", err);
+      if (lastUpdatedEl) {
+        lastUpdatedEl.textContent = "Error loading data";
+      }
     }
   }
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", () => {
+      // Clear cache to force fresh data
+      API.clearPriceCache();
+      loadDashboard();
+    });
+  }
+
+  await loadDashboard();
 }
 
 function renderCategoryBars(categories, container) {
@@ -122,8 +171,6 @@ function renderCategoryBars(categories, container) {
   const colors = {
     Stocks: "#2563eb",
     Crypto: "#f97316",
-    Bonds: "#16a34a",
-    Cash: "#6b7280",
   };
 
   entries.forEach(([name, value]) => {
@@ -135,7 +182,7 @@ function renderCategoryBars(categories, container) {
       <span class="category-label">${name}</span>
       <div class="category-bar-wrapper">
         <div class="category-bar" style="width:${(percent * 100).toFixed(1)}%;background:${
-      colors[name] || "#4b5563"
+        colors[name] || "#4b5563"
     };"></div>
       </div>
       <span class="small text-muted">${formatPercent(percent)}</span>
@@ -146,28 +193,19 @@ function renderCategoryBars(categories, container) {
 
 /* MANAGE ASSETS */
 
-function initManageAssets() {
-  // Simple in-memory asset list for now.
-  // BACKEND INTEGRATION:
-  // - On load, you can populate this using API.getHoldings() or your own /api/assets.
+async function initManageAssets() {
+
   let assets = [];
 
   const form = document.getElementById("asset-form");
-  const formTitle = document.getElementById("asset-form-title");
-  const submitLabel = document.getElementById("asset-form-submit-label");
-  const cancelEditBtn = document.getElementById("asset-form-cancel-edit");
   const tableBody = document.getElementById("asset-table-body");
   const searchInput = document.getElementById("asset-search");
   const countEl = document.getElementById("asset-count");
+  const statusEl = document.getElementById("asset-status");
 
   function resetForm() {
     form.reset();
-    document.getElementById("asset-id").value = "";
-    formTitle.textContent = "Add New Asset";
-    submitLabel.textContent = "Add Asset";
-    cancelEditBtn.classList.add("d-none");
   }
-
   function renderTable(filter = "") {
     const filterLower = filter.toLowerCase();
     tableBody.innerHTML = "";
@@ -177,32 +215,29 @@ function initManageAssets() {
       return combined.includes(filterLower);
     });
 
-    filtered.forEach((asset, index) => {
+    filtered.forEach((asset) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td class="fw-semibold">${asset.symbol}</td>
-        <td>${asset.name || "-"}</td>
-        <td>${asset.category}</td>
-        <td class="text-end">${formatCurrency(asset.buyPrice)}</td>
-        <td class="text-end">${asset.quantity}</td>
-        <td class="text-end">
-          <button class="btn btn-link btn-sm text-decoration-none me-1 edit-asset" data-index="${index}">
-            <i class="bi bi-pencil-square"></i>
-          </button>
-          <button class="btn btn-link btn-sm text-decoration-none text-danger delete-asset" data-index="${index}">
-            <i class="bi bi-trash"></i>
-          </button>
-        </td>
-      `;
+      <td class="fw-semibold">${asset.symbol}</td>
+      <td>${asset.name || "-"}</td>
+      <td>${asset.category}</td>
+      <td class="text-end">${formatCurrency(asset.buyPrice)}</td>
+      <td class="text-end">${asset.quantity}</td>
+    `;
       tableBody.appendChild(tr);
     });
 
     countEl.textContent = `${assets.length} asset${assets.length !== 1 ? "s" : ""}`;
+    if (statusEl) {
+      statusEl.textContent = assets.length
+          ? "Current holdings. Add more above; sell from Holdings page."
+          : "No assets yet. Add one using the form.";
+    }
   }
 
-  form.addEventListener("submit", (e) => {
+
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const id = document.getElementById("asset-id").value;
     const symbol = document.getElementById("asset-symbol").value.trim().toUpperCase();
     const name = document.getElementById("asset-name").value.trim();
     const category = document.getElementById("asset-category").value;
@@ -211,56 +246,19 @@ function initManageAssets() {
 
     if (!symbol || !category || isNaN(buyPrice) || isNaN(quantity)) return;
 
-    if (id) {
-      // Edit
-      const idx = Number(id);
-      assets[idx] = { symbol, name, category, buyPrice, quantity };
-
-      // BACKEND INTEGRATION:
-      // Replace with PUT /api/assets/:id or similar.
-    } else {
-      // Add
+    try {
+      if (statusEl) statusEl.textContent = `Saving ${symbol}…`;
+      await API.addAsset({ symbol, name, category, buyPrice, quantity });
       assets.push({ symbol, name, category, buyPrice, quantity });
-
-      // BACKEND INTEGRATION:
-      // Replace with POST /api/assets with body { symbol, name, category, buyPrice, quantity }.
+      if (statusEl) statusEl.textContent = `Added ${symbol}. Sell from Holdings page.`;
+    } catch (err) {
+      console.error("Error saving asset:", err);
+      if (statusEl) statusEl.textContent = "Failed to save. Check backend.";
+      alert("Failed to save asset to backend.");
+      return;
     }
-
     resetForm();
     renderTable(searchInput.value);
-  });
-
-  cancelEditBtn.addEventListener("click", () => {
-    resetForm();
-  });
-
-  tableBody.addEventListener("click", (e) => {
-    const editBtn = e.target.closest(".edit-asset");
-    const deleteBtn = e.target.closest(".delete-asset");
-
-    if (editBtn) {
-      const idx = Number(editBtn.dataset.index);
-      const asset = assets[idx];
-      document.getElementById("asset-id").value = idx;
-      document.getElementById("asset-symbol").value = asset.symbol;
-      document.getElementById("asset-name").value = asset.name;
-      document.getElementById("asset-category").value = asset.category;
-      document.getElementById("asset-buy-price").value = asset.buyPrice;
-      document.getElementById("asset-quantity").value = asset.quantity;
-
-      formTitle.textContent = "Edit Asset";
-      submitLabel.textContent = "Save Changes";
-      cancelEditBtn.classList.remove("d-none");
-    }
-
-    if (deleteBtn) {
-      const idx = Number(deleteBtn.dataset.index);
-      // BACKEND INTEGRATION:
-      // Replace with DELETE /api/assets/:id, then refresh the local list.
-      assets.splice(idx, 1);
-      renderTable(searchInput.value);
-      resetForm();
-    }
   });
 
   searchInput.addEventListener("input", (e) => {
@@ -268,7 +266,36 @@ function initManageAssets() {
   });
 
   // Initial render
-  renderTable();
+  async function loadFromBackend() {
+    if (!statusEl) {
+      renderTable();
+      return;
+    }
+
+    try {
+      statusEl.textContent = "Loading assets from backend…";
+      const backendHoldings = await API.getHoldings();
+      assets = backendHoldings.map((h) => ({
+        symbol: h.symbol,
+        name: h.name,
+        category: h.category,
+        buyPrice: h.buyPrice,
+        quantity: h.quantity,
+        currentPrice: h.currentPrice ?? h.buyPrice,
+      }));
+      renderTable();
+      statusEl.textContent = assets.length
+          ? "Loaded assets from backend. New entries will also be saved."
+          : "No holdings found yet. Add one using the form.";
+    } catch (err) {
+      console.error("Error loading assets for manage page:", err);
+      statusEl.textContent =
+          "Failed to load existing holdings. You can still add new ones.";
+      renderTable();
+    }
+  }
+
+  await loadFromBackend();
 }
 
 /* HOLDINGS */
@@ -281,18 +308,26 @@ async function initHoldings() {
   const statusEl = document.getElementById("holdings-status");
   const searchInput = document.getElementById("holdings-search");
   const refreshBtn = document.getElementById("refresh-holdings");
+  const historyTableBody = document.getElementById("history-table-body");
+  const historyStatusEl = document.getElementById("history-status");
 
   let holdings = [];
+  let history = [];
 
   async function loadHoldings() {
     try {
       statusEl.textContent = "Loading holdings…";
       holdings = await API.getHoldings();
-      renderHoldings();
-      statusEl.textContent = `Last updated at ${new Date().toLocaleTimeString()}`;
+      renderHoldings(searchInput.value);
+      if (!holdings.length) {
+        statusEl.textContent = "No active holdings.";
+      } else {
+        statusEl.textContent = `Last updated at ${new Date().toLocaleTimeString()}`;
+      }
     } catch (err) {
       console.error("Error loading holdings:", err);
-      statusEl.textContent = "Failed to load holdings. Check backend /api/holdings.";
+      statusEl.textContent =
+          "Failed to load holdings. Check backend /api/assets/holdings.";
     }
   }
 
@@ -305,22 +340,22 @@ async function initHoldings() {
     let count = 0;
 
     holdings
-      .filter((h) => {
-        const combined = `${h.symbol} ${h.name}`.toLowerCase();
-        return combined.includes(filterLower);
-      })
-      .forEach((h) => {
-        const cost = h.buyPrice * h.quantity;
-        const value = h.currentPrice * h.quantity;
-        const pl = value - cost;
-        const plPercent = cost ? (pl / cost) * 100 : 0;
+        .filter((h) => {
+          const combined = `${h.symbol} ${h.name}`.toLowerCase();
+          return combined.includes(filterLower);
+        })
+        .forEach((h) => {
+          const cost = h.buyPrice * h.quantity;
+          const value = h.currentPrice * h.quantity;
+          const pl = value - cost;
+          const plPercent = cost ? (pl / cost) * 100 : 0;
 
-        totalValue += value;
-        totalPL += pl;
-        count += 1;
+          totalValue += value;
+          totalPL += pl;
+          count += 1;
 
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
           <td class="fw-semibold">${h.symbol}</td>
           <td>${h.name || "-"}</td>
           <td>${h.category || "-"}</td>
@@ -328,10 +363,25 @@ async function initHoldings() {
           <td class="text-end">${h.quantity}</td>
           <td class="text-end">${formatCurrency(h.currentPrice)}</td>
           <td class="text-end ${pl >= 0 ? "pl-positive" : "pl-negative"}">${formatCurrency(pl)}</td>
-          <td class="text-end ${pl >= 0 ? "pl-positive" : "pl-negative"}">${plPercent.toFixed(2)}%</td>
+          <td class="text-end ${pl >= 0 ? "pl-positive" : "pl-negative"}">${plPercent.toFixed(
+              2
+          )}%</td>
+          <td class="text-end">
+            <button class="btn btn-danger btn-sm btn-sell-position" data-asset="${encodeURIComponent(JSON.stringify({symbol:h.symbol,name:h.name,category:h.category,buyPrice:h.buyPrice,quantity:h.quantity,currentPrice:h.currentPrice}))}">Sell</button>
+          </td>
         `;
-        tableBody.appendChild(tr);
-      });
+          tableBody.appendChild(tr);
+        });
+
+    if (!count) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="9" class="text-center text-muted py-3">
+            No holdings match your search.
+          </td>
+        </tr>
+      `;
+    }
 
     totalValueEl.textContent = formatCurrency(totalValue);
     totalPLEl.textContent = formatCurrency(totalPL);
@@ -340,15 +390,132 @@ async function initHoldings() {
     countEl.textContent = count.toString();
   }
 
+  async function loadHistory() {
+    if (!historyTableBody || !historyStatusEl) return;
+
+    try {
+      historyStatusEl.textContent = "Loading history…";
+      history = await API.getHistory();
+      renderHistory();
+      if (!history.length) {
+        historyStatusEl.textContent = "No sold assets yet.";
+      } else {
+        historyStatusEl.textContent = `Last updated at ${new Date().toLocaleTimeString()}`;
+      }
+    } catch (err) {
+      console.error("Error loading history:", err);
+      historyStatusEl.textContent =
+          "Failed to load history. Check backend /api/assets/history.";
+    }
+  }
+
+  function renderHistory() {
+    if (!historyTableBody) return;
+
+    historyTableBody.innerHTML = "";
+
+    if (!history.length) {
+      historyTableBody.innerHTML = `
+        <tr>
+          <td colspan="6" class="text-center text-muted py-3">
+            No sold assets yet.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    history.forEach((h) => {
+      const soldAtText = h.soldAt
+          ? new Date(h.soldAt).toLocaleString()
+          : "-";
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="fw-semibold">${h.symbol}</td>
+        <td>${h.name || "-"}</td>
+        <td>${h.assetType || "-"}</td>
+        <td class="text-end">${formatCurrency(h.buyPrice)}</td>
+        <td class="text-end">${formatCurrency(h.sellPrice)}</td>
+        <td class="text-end">${soldAtText}</td>
+      `;
+      historyTableBody.appendChild(tr);
+    });
+  }
+
   searchInput.addEventListener("input", (e) => {
     renderHoldings(e.target.value);
   });
 
-  refreshBtn.addEventListener("click", () => {
-    loadHoldings();
+  // Sell button click delegation (avoids JSON-in-onclick issues)
+  tableBody.addEventListener("click", (e) => {
+    const btn = e.target.closest(".btn-sell-position");
+    if (!btn || !btn.dataset.asset) return;
+    try {
+      const asset = JSON.parse(decodeURIComponent(btn.dataset.asset));
+      openSellModal(asset);
+    } catch (err) {
+      console.error("Sell button parse error:", err);
+    }
   });
 
+  refreshBtn.addEventListener("click", () => {
+    // Clear cache to force fresh data
+    API.clearPriceCache();
+    loadHoldings();
+    loadHistory();
+  });
+
+  // Sell modal handlers (holdings page)
+  const confirmSellEl = document.getElementById('confirm-sell');
+  if (confirmSellEl) {
+    confirmSellEl.addEventListener('click', async () => {
+    const qty = parseInt(document.getElementById('sell-qty').value);
+    const maxQty = parseInt(document.getElementById('sell-max').textContent);
+
+    if (!qty || qty <= 0 || qty > maxQty) {
+      document.getElementById('sell-error').textContent = `Enter 1-${maxQty}`;
+      document.getElementById('sell-error').classList.remove('d-none');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/assets/sell', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: currentSellAsset.symbol, quantityToSell: qty })
+      });
+
+      if (response.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('sellModal'))?.hide();
+        API.clearPriceCache();
+        loadHoldings();
+        loadHistory();
+      } else {
+        throw new Error(await response.text());
+      }
+    } catch (error) {
+      document.getElementById('sell-error').textContent = error.message;
+      document.getElementById('sell-error').classList.remove('d-none');
+    }
+  });
+  }
+
+  // Live proceeds preview (holdings)
+  const sellQtyEl = document.getElementById('sell-qty');
+  if (sellQtyEl) {
+    sellQtyEl.addEventListener('input', function() {
+    const qty = parseInt(this.value) || 0;
+    const proceeds = (qty * (currentSellAsset?.currentPrice || 0)).toLocaleString('en-US', {
+      style: 'currency', currency: 'USD', minimumFractionDigits: 2
+    });
+    const proceedsEl = document.getElementById('sell-proceeds');
+    if (proceedsEl) proceedsEl.textContent = proceeds;
+  });
+  }
+
   loadHoldings();
+  loadHistory();
 }
 
 /* CHARTS (Chart.js) */
@@ -375,6 +542,13 @@ async function initCharts() {
 
     if (categoryPieChart) categoryPieChart.destroy();
 
+    // Color mapping: Stocks = blue, Crypto = orange
+    const colorMap = {
+      Stocks: "#2563eb",
+      Crypto: "#f97316",
+    };
+    const backgroundColor = labels.map(label => colorMap[label] || "#6b7280");
+
     categoryPieChart = new Chart(ctx, {
       type: "pie",
       data: {
@@ -382,7 +556,7 @@ async function initCharts() {
         datasets: [
           {
             data: values,
-            backgroundColor: ["#2563eb", "#f97316", "#16a34a", "#6b7280"],
+            backgroundColor,
           },
         ],
       },
@@ -443,6 +617,8 @@ async function initCharts() {
   }
 
   refreshBtn.addEventListener("click", () => {
+    // Clear cache to force fresh data
+    API.clearPriceCache();
     renderCharts();
   });
 
@@ -459,14 +635,23 @@ function initChatbot() {
   const sendBtn = document.getElementById("chat-send-btn");
   const suggestions = document.querySelectorAll(".chat-suggestion");
 
+  /** Renders **text** as bold; escapes HTML for safety. */
+  function formatChatMessage(text) {
+    const escaped = escapeHtml(text);
+    return escaped
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\n/g, "<br>");
+  }
+
   function appendMessage(text, role) {
     const wrapper = document.createElement("div");
     wrapper.className = `chat-message ${role}`;
     const label = role === "user" ? "You" : role === "assistant" ? "Assistant" : "System";
+    const content = role === "user" ? escapeHtml(text) : formatChatMessage(text);
 
     wrapper.innerHTML = `
       <div class="small text-muted mb-1">${label}</div>
-      <div class="chat-bubble">${escapeHtml(text)}</div>
+      <div class="chat-bubble">${content}</div>
     `;
     messagesContainer.appendChild(wrapper);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -519,30 +704,32 @@ async function initReport() {
   const gainersEl = document.getElementById("report-gainers");
   const losersEl = document.getElementById("report-losers");
   const insightsEl = document.getElementById("report-insights");
-  const recommendationsEl = document.getElementById("report-recommendations");
   const gainersCountEl = document.getElementById("gainers-count");
   const losersCountEl = document.getElementById("losers-count");
+  const weeklyReportBtn = document.getElementById("load-weekly-report");
+  const weeklyReportContent = document.getElementById("weekly-report-content");
+  const diversificationEl = document.getElementById("report-diversification");
 
   async function loadReport() {
-    const [portfolio, holdings, recommendations] = await Promise.all([
+    const [portfolio, holdings, news] = await Promise.all([
       API.getPortfolio(),
       API.getHoldings(),
-      API.getTopRecommendations(),
+      API.getMarketNews(),
     ]);
 
     // Highlights
     const totalVal = portfolio.totalValue || 0;
     const totalPL = portfolio.totalPL || 0;
     const totalPLPercent =
-      portfolio.totalPLPercent ??
-      (totalVal ? (totalPL / (totalVal - totalPL)) * 100 : 0);
+        portfolio.totalPLPercent ??
+        (totalVal ? (totalPL / (totalVal - totalPL)) * 100 : 0);
 
     highlightsEl.innerHTML = "";
     [
       `Total portfolio value: ${formatCurrency(totalVal)}`,
       `Total P/L: ${formatCurrency(totalPL)} (${totalPLPercent.toFixed(2)}%)`,
       `Category with highest allocation: ${
-        Object.entries(portfolio.categories || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/A"
+          Object.entries(portfolio.categories || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/A"
       }`,
     ].forEach((t) => {
       const li = document.createElement("li");
@@ -595,75 +782,54 @@ async function initReport() {
     gainersCountEl.textContent = gainers.length.toString();
     losersCountEl.textContent = losers.length.toString();
 
-    // Insights
+    // Market news (stocks & crypto)
     insightsEl.innerHTML = "";
-    const insights = [];
-
-    const categories = portfolio.categories || {};
-    const sortedCats = Object.entries(categories).sort((a, b) => b[1] - a[1]);
-    if (sortedCats[0]) {
-      const [topCat, topVal] = sortedCats[0];
-      const allocationPercent = totalVal ? (topVal / totalVal) * 100 : 0;
-      insights.push(
-        `Your largest allocation is in ${topCat} (${allocationPercent.toFixed(
-          1
-        )}% of portfolio value). Consider if this aligns with your risk tolerance.`
-      );
-    }
-
-    if (gainers[0]) {
-      insights.push(
-        `${gainers[0].symbol} has contributed the most to your returns recently. Review whether to rebalance or let winners run.`
-      );
-    }
-
-    if (losers[0]) {
-      insights.push(
-        `${losers[0].symbol} is your largest detractor. Investigate whether fundamentals still support your thesis.`
-      );
-    }
-
-    if (!insights.length) {
-      insights.push("No specific insights available yet. Add holdings to generate a richer report.");
-    }
-
-    insights.forEach((text) => {
+    const headlines = Array.isArray(news) && news.length ? news : ["No market news available."];
+    headlines.forEach((text) => {
       const li = document.createElement("li");
       li.className = "mb-2";
       li.textContent = text;
       insightsEl.appendChild(li);
     });
 
-    // Recommendations
-    recommendationsEl.innerHTML = "";
-    recommendations.forEach((r) => {
-      const li = document.createElement("li");
-      li.className = "list-group-item small";
-      li.innerHTML = `
-        <div class="d-flex justify-content-between align-items-center">
-          <div>
-            <span class="fw-semibold">${r.symbol}</span>
-            <span class="text-muted ms-1">${r.name || ""}</span>
-          </div>
-          <span class="badge ${
-            r.action === "Buy"
-              ? "bg-success-subtle text-success"
-              : r.action === "Sell" || r.action === "Trim"
-              ? "bg-danger-subtle text-danger"
-              : "bg-secondary-subtle text-secondary"
-          }">
-            ${r.action || "Review"}
-          </span>
-        </div>
-        <div class="mt-1 text-muted">${r.rationale || ""}</div>
-      `;
-      recommendationsEl.appendChild(li);
-    });
+    // Stock diversification (based on holdings)
+    const stockHoldings = holdings.filter((h) => (h.assetType || h.category || "").toUpperCase() === "STOCK" || (h.category || "") === "Stocks");
+    const stockCount = new Set(stockHoldings.map((h) => (h.symbol || "").toUpperCase())).size;
+    let divText = "No stock holdings.";
+    if (stockCount > 0) {
+      if (stockCount <= 2) divText = `Concentrated. Why: You hold only ${stockCount} stock(s) — high risk. Add more to diversify.`;
+      else if (stockCount <= 4) divText = `Moderate. Why: ${stockCount} stocks — add 1–2 more for better diversification.`;
+      else if (stockCount >= 8) divText = `Well diversified. Why: ${stockCount} stocks — good spread, lower single-name risk.`;
+      else divText = `Good diversification. Why: ${stockCount} stocks — balanced.`;
+    }
+    if (diversificationEl) diversificationEl.textContent = divText;
   }
 
   refreshBtn.addEventListener("click", () => {
+    // Clear cache to force fresh data
+    API.clearPriceCache();
     loadReport();
   });
+
+  // Weekly report button handler
+  if (weeklyReportBtn && weeklyReportContent) {
+    weeklyReportBtn.addEventListener("click", async () => {
+      try {
+        weeklyReportBtn.disabled = true;
+        weeklyReportBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Loading...';
+        weeklyReportContent.textContent = "Generating weekly report...";
+
+        const report = await API.getWeeklyReport();
+        weeklyReportContent.innerHTML = `<pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${escapeHtml(report)}</pre>`;
+      } catch (err) {
+        console.error("Error loading weekly report:", err);
+        weeklyReportContent.textContent = "Failed to load weekly report. Please try again.";
+      } finally {
+        weeklyReportBtn.disabled = false;
+        weeklyReportBtn.innerHTML = '<i class="bi bi-download me-1"></i> Load Weekly Report';
+      }
+    });
+  }
 
   loadReport();
 }
@@ -686,7 +852,8 @@ function formatPercent(value) {
 
 function escapeHtml(str) {
   return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
 }
+

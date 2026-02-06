@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Arrays;
 import java.util.List;
 
 @Service
@@ -60,5 +61,15 @@ public class ReportService {
         sb.append("Avg Profit: ").append(avgProfit.setScale(1, RoundingMode.HALF_UP)).append("%\n");
 
         return sb.toString();
+    }
+
+    /** Placeholder market news (stocks & crypto). Replace with real news API when available. */
+    public List<String> getMarketNewsHeadlines() {
+        return Arrays.asList(
+                "Stocks: Major indices mixed; tech earnings in focus.",
+                "Crypto: Bitcoin holds key level; ETF flows steady.",
+                "Fed watch: Rate outlook drives bond, equity moves.",
+                "Sector rotation: Defensives gain as growth cools."
+        );
     }
 }

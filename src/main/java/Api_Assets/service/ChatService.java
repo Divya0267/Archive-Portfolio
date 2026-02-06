@@ -9,7 +9,6 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 @Service
 public class ChatService {
@@ -25,128 +24,130 @@ public class ChatService {
 
     public String processMessage(String message) {
         if (message == null || message.isBlank()) {
-            return "Please enter a valid query like: top 3 assets, top 3 stocks, or top 3 crypto.";
+            return "Please enter a valid query. Examples: \"suggest top 5 stocks\", \"suggest top 3 crypto\", \"top 5 assets\", or \"is my portfolio concentrated?\"";
         }
 
         String msg = message.toLowerCase();
-        int n = extractNumber(msg, 3);
+        int n = extractNumber(msg, 5);
 
-        if (msg.contains("top") && msg.contains("stock")) {
-            List<UserAsset> allStocks = recommendationService.getAllStocks();
-            String diversification = analyzeStockDiversification(allStocks);
-
-            List<UserAssetRecommendation> topStocks = recommendationService.getTopNStocks(n);
-            if (topStocks.isEmpty()) return "No stocks found in your portfolio.";
-
-            String stocksText = formatAssetList(topStocks, "STOCK");
-            String prompt = createStockPrompt(n, stocksText, diversification);
-
-            String geminiReply = geminiService.generateResponse(prompt);
-            return geminiReply != null && !geminiReply.isBlank()
-                    ? geminiReply
-                    : fallbackResponse("STOCKS", topStocks, diversification);
+        // Concentrated / diversified / diluted (user asking about portfolio spread)
+        if (msg.contains("concentrated") || msg.contains("diversif") || msg.contains("diversification")
+                || msg.contains("diluted") || msg.contains("dilute")) {
+            return analyzeDiversificationWithReason();
         }
 
-        if (msg.contains("top") && msg.contains("crypto")) {
-            List<UserAssetRecommendation> topCrypto = recommendationService.getTopNCrypto(n);
-            if (topCrypto.isEmpty()) return "No crypto assets found in your portfolio.";
-
-            String cryptoText = formatAssetList(topCrypto, "CRYPTO");
-            String prompt = createCryptoPrompt(n, cryptoText);
-
-            String geminiReply = geminiService.generateResponse(prompt);
-            return geminiReply != null && !geminiReply.isBlank()
-                    ? geminiReply
-                    : fallbackResponse("CRYPTO", topCrypto);
+        if ((msg.contains("top") || msg.contains("suggest")) && msg.contains("stock")) {
+            List<UserAssetRecommendation> topStocks = recommendationService.getTopNStocksSuggestions(n);
+            return buildNumberedResponse(topStocks, n, "stocks", null, "stocks");
         }
 
-        if (msg.contains("top")) {
-            List<UserAssetRecommendation> topAssets = recommendationService.getTopNAssets(n);
-            if (topAssets.isEmpty()) return "No assets found in your portfolio.";
+        if ((msg.contains("top") || msg.contains("suggest")) && msg.contains("crypto")) {
+            List<UserAssetRecommendation> topCrypto = recommendationService.getTopNCryptoSuggestions(n);
+            return buildNumberedResponse(topCrypto, n, "crypto", null, "crypto");
+        }
 
-            String assetsText = formatAssetList(topAssets, null);
-            String prompt = createAssetsPrompt(n, assetsText);
-
-            String geminiReply = geminiService.generateResponse(prompt);
-            return geminiReply != null && !geminiReply.isBlank()
-                    ? geminiReply
-                    : fallbackResponse("ASSETS", topAssets);
+        if (msg.contains("top") || (msg.contains("suggest") && msg.contains("asset"))) {
+            List<UserAssetRecommendation> topAssets = recommendationService.getTopNAssetsSuggestions(n);
+            return buildNumberedResponse(topAssets, n, "assets", null, "stocks and crypto");
         }
 
         return getDefaultResponse(message);
     }
 
-    private String analyzeStockDiversification(List<UserAsset> stocks) {
-        if (stocks.isEmpty()) return "**NO STOCKS**: Add stocks to analyze diversification.";
+    /** Full diversification analysis with reason (stocks + crypto). */
+    private String analyzeDiversificationWithReason() {
+        List<UserAsset> holdings = recommendationService.getAllHoldings();
+        String base = analyzeDiversification(holdings);
 
-        long totalStocks = stocks.stream().map(UserAsset::getSymbol).distinct().count();
+        long uniqueCount = holdings.stream()
+                .map(a -> a.getSymbol() != null ? a.getSymbol().toUpperCase() : "")
+                .filter(s -> !s.isEmpty())
+                .distinct()
+                .count();
+        String geminiPrompt = "A portfolio has " + holdings.size() + " positions across "
+                + uniqueCount + " different assets (stocks and/or crypto). "
+                + "In 2-3 sentences, give a brief practical reason about whether this is concentrated or diversified. Be concise.";
+        String geminiInsight = geminiService.generateResponse(geminiPrompt);
 
-        if (totalStocks <= 2) {
-            return "**CONCENTRATED** (" + totalStocks + " stocks): High risk - too few holdings.";
+        if (isValidGeminiResponse(geminiInsight)) {
+            return base + "\n\n**Insight:** " + geminiInsight.trim();
+        }
+        return base;
+    }
+
+    /** Analyze diversification across stocks + crypto, with clear reason. */
+    private String analyzeDiversification(List<UserAsset> holdings) {
+        if (holdings == null || holdings.isEmpty()) {
+            return "**No holdings.** Why: Add assets (stocks or crypto) to analyze diversification.";
         }
 
-        if (totalStocks <= 4) {
-            return "**MODERATE** (" + totalStocks + " stocks): Consider 1-2 more for better diversification.";
+        long uniqueSymbols = holdings.stream().map(a -> (a.getSymbol() != null ? a.getSymbol().toUpperCase() : "")).distinct().count();
+        long stockCount = holdings.stream().filter(a -> "STOCK".equalsIgnoreCase(a.getAssetType())).map(UserAsset::getSymbol).distinct().count();
+        long cryptoCount = holdings.stream().filter(a -> "CRYPTO".equalsIgnoreCase(a.getAssetType())).map(UserAsset::getSymbol).distinct().count();
+
+        if (uniqueSymbols <= 2) {
+            return "**Concentrated.** Why: You hold only " + uniqueSymbols + " asset(s) "
+                    + (stockCount > 0 && cryptoCount > 0 ? "(stocks + crypto). " : "")
+                    + "Risk is high if one fails. Add more to diversify.";
+        }
+        if (uniqueSymbols <= 4) {
+            return "**Moderate.** Why: " + uniqueSymbols + " holdings. Add 1–2 more across stocks/crypto for better diversification.";
+        }
+        if (uniqueSymbols >= 8) {
+            return "**Well diversified.** Why: " + uniqueSymbols + " assets — good spread, lower single-name risk.";
+        }
+        return "**Good diversification.** Why: " + uniqueSymbols + " holdings — balanced.";
+    }
+
+    /** Builds a numbered list of assets (from portfolio + market). Uses Gemini for insight when available. */
+    private String buildNumberedResponse(List<UserAssetRecommendation> assets, int requestedN, String type,
+                                         String diversification, String assetTypeForGemini) {
+        if (assets.isEmpty()) {
+            return "No " + type + " recommendations available. Try adding assets or check API keys.";
         }
 
-        if (totalStocks >= 8) {
-            return "**WELL DIVERSIFIED** (" + totalStocks + " stocks): Excellent spread across holdings.";
+        StringBuilder sb = new StringBuilder();
+        int index = 1;
+        for (UserAssetRecommendation a : assets) {
+            String action = actionFromRisk(a.getRiskLevel(), a.getProfitPercent());
+            sb.append(index++).append(". **").append(a.getSymbol()).append("** – ")
+                    .append(action).append(" – ").append(formatPercent(a.getProfitPercent())).append("\n");
+        }
+        sb.setLength(Math.max(0, sb.length() - 1)); // drop trailing newline
+
+        if (diversification != null && !diversification.isEmpty()) {
+            sb.append("\n\n").append(diversification);
         }
 
-        return "**GOOD DIVERSIFICATION** (" + totalStocks + " stocks): Balanced portfolio size.";
+        // Gemini insight: brief market context for these recommendations
+        String symbols = assets.stream().map(UserAssetRecommendation::getSymbol).limit(5).reduce((a, b) -> a + ", " + b).orElse("");
+        String geminiPrompt = "Given these top " + assetTypeForGemini + " picks: " + symbols
+                + ". In 1-2 sentences, give a brief market context or consideration. Be concise.";
+        String geminiInsight = geminiService.generateResponse(geminiPrompt);
+        if (isValidGeminiResponse(geminiInsight)) {
+            sb.append("\n\n**Insight:** ").append(geminiInsight.trim());
+        }
+
+        return sb.toString().trim();
     }
 
-    private String formatAssetList(List<UserAssetRecommendation> assets, String type) {
-        return assets.stream()
-                .map(a -> "**" + a.getSymbol() + "** (" + formatPercent(a.getProfitPercent()) +
-                        (type != null ? ", " + type : "") + ")")
-                .collect(Collectors.joining(", "));
+    private String actionFromRisk(String riskLevel, BigDecimal profitPercent) {
+        if (riskLevel != null) {
+            if ("HIGH".equalsIgnoreCase(riskLevel)) return "Review";
+            if ("MEDIUM".equalsIgnoreCase(riskLevel)) return "Hold";
+            if ("LOW".equalsIgnoreCase(riskLevel)) return profitPercent != null && profitPercent.compareTo(BigDecimal.ZERO) > 0 ? "Buy" : "Hold";
+        }
+        return profitPercent != null && profitPercent.compareTo(BigDecimal.valueOf(20)) >= 0 ? "Buy" : "Hold";
     }
 
-    private String createStockPrompt(int n, String stocksText, String diversification) {
-        String examples = "**AAPL**: HOLD (+23.4%) - Tech leader\n**NVDA**: BUY (+45.2%) - AI growth";
-        return String.format(
-                "STOCK RECOMMENDATIONS: My top %d STOCKS: %s\n\n" +
-                        "**DIVERSIFICATION**: %s\n\n" +
-                        "TASK: For EXACTLY %d stocks, provide recommendations in this EXACT format:\n%s\n\n" +
-                        "RULES:\n1. EXACTLY %d lines, one per stock\n2. Use ONLY these symbols\n3. Match profit %% exactly\n4. Reason: 2-3 words only",
-                n, stocksText, diversification, n, examples, n
-        );
-    }
-
-    private String createCryptoPrompt(int n, String cryptoText) {
-        String examples = "**BTC**: HOLD (+22.1%) - Market leader\n**SOL**: BUY (+89.3%) - High growth";
-        return String.format(
-                "CRYPTO RECOMMENDATIONS: My top %d CRYPTO: %s\n\nTASK: For EXACTLY %d crypto:\n%s\n\nRULES: %d lines, match profit %%, 2-3 word reasons",
-                n, cryptoText, n, examples, n
-        );
-    }
-
-    private String createAssetsPrompt(int n, String assetsText) {
-        String examples = "**AAPL**: HOLD (+23.4%) - Tech stable\n**BTC**: HOLD (+22.1%) - Crypto leader";
-        return String.format(
-                "ASSET RECOMMENDATIONS: My top %d ASSETS: %s\nTASK: %d perfect recommendations:\n%s",
-                n, assetsText, n, examples
-        );
-    }
-
-    private String fallbackResponse(String type, List<UserAssetRecommendation> assets, String diversification) {
-        String divText = "STOCKS".equals(type) ? "\n" + diversification : "";
-        return "TOP " + type + ": " + formatAssetList(assets, type) + divText;
-    }
-
-    private String fallbackResponse(String type, List<UserAssetRecommendation> assets) {
-        return fallbackResponse(type, assets, "");
+    private boolean isValidGeminiResponse(String s) {
+        if (s == null || s.isBlank()) return false;
+        String lower = s.toLowerCase();
+        return !lower.contains("unavailable") && !lower.contains("check api");
     }
 
     private String getDefaultResponse(String message) {
-        return """
-            **PORTFOLIO CHATBOT** 
-            **Commands:**
-            • `top 3 stocks` → Best stocks + diversification analysis
-            • `top 3 crypto` → Best crypto + BUY/SELL/HOLD
-            • `top 5 assets` → Overall portfolio ranking
-            """;
+        return "**Try:** suggest top 5 stocks | suggest top 3 crypto | top 5 assets | is my portfolio concentrated?";
     }
 
     private int extractNumber(String text, int defaultValue) {

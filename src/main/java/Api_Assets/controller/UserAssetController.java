@@ -62,10 +62,20 @@ public class UserAssetController {
             throw new RuntimeException("Asset not found");
         }
 
+        int totalAvailable = assets.stream()
+                .mapToInt(a -> a.getQty() != null ? a.getQty() : 0)
+                .sum();
+        int qtyToSell = request.getQuantityToSell();
+
+        if (qtyToSell <= 0) {
+            throw new RuntimeException("Sell quantity must be positive");
+        }
+        if (qtyToSell > totalAvailable) {
+            throw new RuntimeException("Sell quantity (" + qtyToSell + ") exceeds available (" + totalAvailable + "). No sell performed.");
+        }
+
         BigDecimal livePrice =
                 getLivePrice(assets.get(0).getAssetType(), request.getSymbol());
-
-        int qtyToSell = request.getQuantityToSell();
 
         for (UserAsset asset : assets) {
             if (qtyToSell <= 0) break;
@@ -118,7 +128,8 @@ public class UserAssetController {
     public List<DashboardAsset> getHoldings() {
         return repo.findAll().stream()
                 .filter(a -> a.getQty() != null && a.getQty() > 0)
-                .map(this::mapToDashboard)
+                .map(this::mapToDashboardSafe)
+                .filter(java.util.Objects::nonNull)
                 .collect(Collectors.toList());
     }
 
@@ -131,6 +142,16 @@ public class UserAssetController {
     }
 
     // ---------------- HELPERS ----------------
+    /** Safe mapping: if live price fails (e.g. rate limit for crypto), skip this asset so others still show. */
+    private DashboardAsset mapToDashboardSafe(UserAsset asset) {
+        try {
+            return mapToDashboard(asset);
+        } catch (Exception e) {
+            System.err.println("Skipping asset " + asset.getSymbol() + " (" + asset.getAssetType() + "): " + e.getMessage());
+            return null;
+        }
+    }
+
     private DashboardAsset mapToDashboard(UserAsset asset) {
         BigDecimal livePrice =
                 getLivePrice(asset.getAssetType(), asset.getSymbol());

@@ -19,12 +19,10 @@ public class RiskAssessment {
     private int availableQuantity;
     private String recommendation;
 
-    // ✅ FIXED: Check if selling ALL available quantity
     public boolean isFullSell() {
         return this.requestedQuantity >= this.availableQuantity;
     }
 
-    // Bonus: Check risk level
     public boolean isHighRisk() {
         return "HIGH".equals(this.riskLevel);
     }
